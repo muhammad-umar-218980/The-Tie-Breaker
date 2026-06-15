@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type, Schema } from '@google/genai';
 import dotenv from 'dotenv';
 
@@ -127,10 +128,11 @@ app.post('/api/analyze', async (req, res) => {
               temperature: 0.2,
             },
           });
-          break; // success
+          break;
         } catch (err: any) {
           attempt++;
           if (attempt >= maxAttempts) throw err;
+
           if (err?.status === 503 || err?.status === 429 || err?.message?.includes('503') || err?.message?.includes('429')) {
              console.log(`API Error (Attempt ${attempt}/${maxAttempts}). Retrying in 2 seconds...`);
              await new Promise(resolve => setTimeout(resolve, 2000));
@@ -167,7 +169,7 @@ app.post('/api/analyze', async (req, res) => {
     }
   });
 
-// --- DEPLOYMENT / STARTUP LOGIC ---
+export default app;
 
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 3000;
@@ -180,7 +182,7 @@ if (!process.env.VERCEL) {
       });
       app.use(vite.middlewares);
       app.listen(Number(PORT), '0.0.0.0', () => {
-        console.log(`Local Dev Server running on http://localhost:${PORT}`);
+        console.log(`Server running on http://localhost:${PORT}`);
       });
     });
   } else {
@@ -190,7 +192,7 @@ if (!process.env.VERCEL) {
       res.sendFile(path.join(distPath, 'index.html'));
     });
     app.listen(Number(PORT), '0.0.0.0', () => {
-      console.log(`Production Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
   }
 }
