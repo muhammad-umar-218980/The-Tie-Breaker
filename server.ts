@@ -1,20 +1,16 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type, Schema } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
+const app = express();
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+app.use(express.json());
 
-  app.use(express.json());
-
-  app.post('/api/analyze', async (req, res) => {
+app.post('/api/analyze', async (req, res) => {
     try {
       const { decision, format } = req.body;
 
@@ -135,12 +131,11 @@ async function startServer() {
         } catch (err: any) {
           attempt++;
           if (attempt >= maxAttempts) throw err;
-          // Only retry on 503 or 429
           if (err?.status === 503 || err?.status === 429 || err?.message?.includes('503') || err?.message?.includes('429')) {
              console.log(`API Error (Attempt ${attempt}/${maxAttempts}). Retrying in 2 seconds...`);
              await new Promise(resolve => setTimeout(resolve, 2000));
           } else {
-             throw err; // throw for other errors
+             throw err; 
           }
         }
       }
@@ -172,23 +167,30 @@ async function startServer() {
     }
   });
 
+// --- DEPLOYMENT / STARTUP LOGIC ---
+
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 3000;
+
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+    import('vite').then(async ({ createServer: createViteServer }) => {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+      app.listen(Number(PORT), '0.0.0.0', () => {
+        console.log(`Local Dev Server running on http://localhost:${PORT}`);
+      });
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+    app.listen(Number(PORT), '0.0.0.0', () => {
+      console.log(`Production Server running on port ${PORT}`);
+    });
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
-
-startServer();
